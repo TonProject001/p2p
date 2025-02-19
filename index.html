@@ -8,20 +8,10 @@
         #map {
             width: 100%;
             height: 500px;
-            border: 1px solid #ccc;
-            position: relative;
         }
-        .marker {
-            position: absolute;
-            width: 20px;
-            height: 20px;
-            background-color: red;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-        }
-        .user1 { background-color: blue; }
-        .user2 { background-color: green; }
     </style>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
     <h1>ระบุจุดนัดพบ</h1>
@@ -31,6 +21,9 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
     <script>
         // ตั้งค่า Firebase
@@ -48,44 +41,53 @@
         const app = firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
-        const map = document.getElementById('map');
-        let userMarker = null;
+        let map;
+        let userMarker;
 
-        // ฟังก์ชันเพิ่ม Marker ลงบนแผนที่
-        function addMarker(x, y, className) {
-            const marker = document.createElement('div');
-            marker.className = `marker ${className}`;
-            marker.style.left = `${x}px`;
-            marker.style.top = `${y}px`;
-            map.appendChild(marker);
-            return marker;
-        }
-
-        // ฟังก์ชันลบ Marker เดิม (ถ้ามี)
-        function removeMarker(marker) {
-            if (marker && marker.parentNode) {
-                marker.parentNode.removeChild(marker);
-            }
-        }
+        // สร้างแผนที่ OpenStreetMap
+        map = L.map('map').setView([13.7563, 100.5018], 12); // ตั้งค่าเริ่มต้นที่กรุงเทพฯ
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
 
         // เมื่อคลิกบนแผนที่
-        map.addEventListener('click', (event) => {
-            const rect = map.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
+        map.on('click', (event) => {
+            const lat = event.latlng.lat;
+            const lng = event.latlng.lng;
 
             // อัปเดตตำแหน่งของผู้ใช้ใน Firebase
             const userId = localStorage.getItem('userId') || `user${Math.random().toString(36).substr(2, 5)}`;
             localStorage.setItem('userId', userId);
 
             database.ref(`users/${userId}`).set({
-                x: x,
-                y: y
+                lat: lat,
+                lng: lng
             });
 
             // อัปเดต Marker ของผู้ใช้เอง
-            removeMarker(userMarker);
-            userMarker = addMarker(x, y, 'user1');
+            if (userMarker) {
+                map.removeLayer(userMarker); // ลบ Marker เดิม
+            }
+            userMarker = L.marker([lat, lng], { icon: blueIcon }).addTo(map);
+        });
+
+        // กำหนดไอคอน Marker สีฟ้าและสีเขียว
+        const blueIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        const greenIcon = L.icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
         });
 
         // ดึงข้อมูลตำแหน่งจาก Firebase และแสดง Marker ของผู้ใช้อื่น
@@ -94,12 +96,16 @@
             if (!users) return;
 
             // ลบ Marker เดิมทั้งหมด
-            document.querySelectorAll('.marker:not(.user1)').forEach(marker => marker.remove());
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Marker && layer !== userMarker) {
+                    map.removeLayer(layer);
+                }
+            });
 
             // เพิ่ม Marker สำหรับผู้ใช้อื่น
             for (const [userId, position] of Object.entries(users)) {
                 if (userId !== localStorage.getItem('userId')) {
-                    addMarker(position.x, position.y, 'user2');
+                    L.marker([position.lat, position.lng], { icon: greenIcon }).addTo(map);
                 }
             }
         });
