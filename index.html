@@ -176,29 +176,28 @@
         }
 
         function calculateRoute(start, end) {
-            const apiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; // Replace with your Google Maps API Key
-            const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}&key=${apiKey}`;
+            const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=5b3ce3597851110001cf6248b348229dfdd043e88c2d916329364992&start=${start.lng},${start.lat}&end=${end.lng},${end.lat}`;
 
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
-                    if (data.status === 'OK') {
-                        const route = data.routes[0].overview_polyline.points;
-                        const decodedRoute = L.Polyline.fromEncoded(route).getLatLngs();
+                    if (data.features && data.features.length > 0) {
+                        const coordinates = data.features[0].geometry.coordinates;
+                        const route = coordinates.map(coord => [coord[1], coord[0]]);
 
                         // Draw Route on Map
                         if (map.route) {
                             map.removeLayer(map.route);
                         }
-                        map.route = L.polyline(decodedRoute, { color: 'blue' }).addTo(map);
+                        map.route = L.polyline(route, { color: 'blue' }).addTo(map);
 
                         // Fit Map to Route
                         map.fitBounds(map.route.getBounds());
 
                         // Display Distance and Duration
-                        const distance = data.routes[0].legs[0].distance.text;
-                        const duration = data.routes[0].legs[0].duration.text;
-                        alert(`ระยะทาง: ${distance}\nเวลาเดินทาง: ${duration}`);
+                        const distance = (data.features[0].properties.summary.distance / 1000).toFixed(2); // Convert to km
+                        const duration = Math.ceil(data.features[0].properties.summary.duration / 60); // Convert to minutes
+                        alert(`ระยะทาง: ${distance} กม.\nเวลาเดินทาง: ${duration} นาที`);
                     } else {
                         alert('ไม่สามารถคำนวณเส้นทางได้');
                     }
