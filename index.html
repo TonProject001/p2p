@@ -1,79 +1,108 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>จุดนัดพบ</title>
     <style>
         #map {
-            height: 400px;
             width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            position: relative;
         }
+        .marker {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .user1 { background-color: blue; }
+        .user2 { background-color: green; }
     </style>
 </head>
 <body>
-    <h1>จุดนัดพบ</h1>
+    <h1>ระบุจุดนัดพบ</h1>
     <div id="map"></div>
-    <p id="status">กำลังดึงตำแหน่ง...</p>
+    <p>คลิกบนแผนที่เพื่อกำหนดตำแหน่งของคุณ</p>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
 
     <script>
-        const map = L.map('map').setView([13.7563, 100.5018], 13); // ตำแหน่งเริ่มต้นที่กรุงเทพฯ
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        // ตั้งค่า Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyC_VUDDpxMiRkLONjOganaRqvoi4q3Gnt8",
+            authDomain: "meetingpointapp.firebaseapp.com",
+            databaseURL: "https://meetingpointapp-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "meetingpointapp",
+            storageBucket: "meetingpointapp.firebasestorage.app",
+            messagingSenderId: "753839058602",
+            appId: "1:753839058602:web:5ae71cc0c803de3c862ad3"
+        };
 
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        const map = document.getElementById('map');
         let userMarker = null;
-        let partnerMarker = null;
 
-        // ฟังก์ชันสำหรับอัพเดตตำแหน่ง
-        function updateLocation(latitude, longitude) {
-            if (userMarker) {
-                userMarker.setLatLng([latitude, longitude]);
-            } else {
-                userMarker = L.marker([latitude, longitude]).addTo(map);
-            }
-            map.setView([latitude, longitude], 13);
+        // ฟังก์ชันเพิ่ม Marker ลงบนแผนที่
+        function addMarker(x, y, className) {
+            const marker = document.createElement('div');
+            marker.className = `marker ${className}`;
+            marker.style.left = `${x}px`;
+            marker.style.top = `${y}px`;
+            map.appendChild(marker);
+            return marker;
         }
 
-        // ฟังก์ชันสำหรับอัพเดตตำแหน่งของคู่หู
-        function updatePartnerLocation(latitude, longitude) {
-            if (partnerMarker) {
-                partnerMarker.setLatLng([latitude, longitude]);
-            } else {
-                partnerMarker = L.marker([latitude, longitude], {color: 'red'}).addTo(map);
+        // ฟังก์ชันลบ Marker เดิม (ถ้ามี)
+        function removeMarker(marker) {
+            if (marker && marker.parentNode) {
+                marker.parentNode.removeChild(marker);
             }
         }
 
-        // ใช้ Geolocation API เพื่อดึงตำแหน่งปัจจุบัน
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition((position) => {
-                const { latitude, longitude } = position.coords;
-                updateLocation(latitude, longitude);
+        // เมื่อคลิกบนแผนที่
+        map.addEventListener('click', (event) => {
+            const rect = map.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
 
-                // ส่งตำแหน่งไปยังเซิร์ฟเวอร์ (ตัวอย่างเท่านั้น)
-                // ในทางปฏิบัติคุณควรใช้ WebSocket หรือ API อื่นๆ
-                fetch('/update-location', {
-                    method: 'POST',
-                    body: JSON.stringify({ latitude, longitude }),
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-            }, (error) => {
-                console.error('Error getting location', error);
+            // อัปเดตตำแหน่งของผู้ใช้ใน Firebase
+            const userId = localStorage.getItem('userId') || `user${Math.random().toString(36).substr(2, 5)}`;
+            localStorage.setItem('userId', userId);
+
+            database.ref(`users/${userId}`).set({
+                x: x,
+                y: y
             });
-        } else {
-            alert('เบราว์เซอร์ของคุณไม่รองรับ Geolocation');
-        }
 
-        // ตัวอย่างการรับตำแหน่งของคู่หู (ควรใช้ WebSocket ในทางปฏิบัติ)
-        setInterval(() => {
-            fetch('/get-partner-location')
-                .then(response => response.json())
-                .then(data => {
-                    updatePartnerLocation(data.latitude, data.longitude);
-                });
-        }, 5000); // อัพเดตทุก 5 วินาที
+            // อัปเดต Marker ของผู้ใช้เอง
+            removeMarker(userMarker);
+            userMarker = addMarker(x, y, 'user1');
+        });
+
+        // ดึงข้อมูลตำแหน่งจาก Firebase และแสดง Marker ของผู้ใช้อื่น
+        database.ref('users').on('value', (snapshot) => {
+            const users = snapshot.val();
+            if (!users) return;
+
+            // ลบ Marker เดิมทั้งหมด
+            document.querySelectorAll('.marker:not(.user1)').forEach(marker => marker.remove());
+
+            // เพิ่ม Marker สำหรับผู้ใช้อื่น
+            for (const [userId, position] of Object.entries(users)) {
+                if (userId !== localStorage.getItem('userId')) {
+                    addMarker(position.x, position.y, 'user2');
+                }
+            }
+        });
     </script>
 </body>
 </html>
