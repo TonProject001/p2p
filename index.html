@@ -19,13 +19,11 @@
     <p>คลิกบนแผนที่เพื่อกำหนดตำแหน่งของคุณ</p>
 
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+    <script type="module">
+        // Import Firebase modules
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
-    <script>
         // ตั้งค่า Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyC_VUDDpxMiRkLONjOganaRqvoi4q3Gnt8",
@@ -38,17 +36,16 @@
         };
 
         // Initialize Firebase
-        const app = firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-
-        let map;
-        let userMarker;
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
 
         // สร้างแผนที่ OpenStreetMap
-        map = L.map('map').setView([13.7563, 100.5018], 12); // ตั้งค่าเริ่มต้นที่กรุงเทพฯ
+        const map = L.map('map').setView([13.7563, 100.5018], 12); // ตั้งค่าเริ่มต้นที่กรุงเทพฯ
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
+
+        let userMarker;
 
         // เมื่อคลิกบนแผนที่
         map.on('click', (event) => {
@@ -59,7 +56,7 @@
             const userId = localStorage.getItem('userId') || `user${Math.random().toString(36).substr(2, 5)}`;
             localStorage.setItem('userId', userId);
 
-            database.ref(`users/${userId}`).set({
+            set(ref(database, `users/${userId}`), {
                 lat: lat,
                 lng: lng
             });
@@ -68,30 +65,12 @@
             if (userMarker) {
                 map.removeLayer(userMarker); // ลบ Marker เดิม
             }
-            userMarker = L.marker([lat, lng], { icon: blueIcon }).addTo(map);
-        });
-
-        // กำหนดไอคอน Marker สีฟ้าและสีเขียว
-        const blueIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
-        });
-
-        const greenIcon = L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
+            userMarker = L.marker([lat, lng]).addTo(map);
         });
 
         // ดึงข้อมูลตำแหน่งจาก Firebase และแสดง Marker ของผู้ใช้อื่น
-        database.ref('users').on('value', (snapshot) => {
+        const usersRef = ref(database, 'users');
+        onValue(usersRef, (snapshot) => {
             const users = snapshot.val();
             if (!users) return;
 
@@ -105,10 +84,13 @@
             // เพิ่ม Marker สำหรับผู้ใช้อื่น
             for (const [userId, position] of Object.entries(users)) {
                 if (userId !== localStorage.getItem('userId')) {
-                    L.marker([position.lat, position.lng], { icon: greenIcon }).addTo(map);
+                    L.marker([position.lat, position.lng]).addTo(map);
                 }
             }
         });
     </script>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </body>
 </html>
