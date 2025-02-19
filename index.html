@@ -144,27 +144,48 @@
                 }
             });
 
-            // Long Press to Set Meeting Point
-            let pressTimer;
-            map.on('mousedown', (event) => {
-                pressTimer = setTimeout(() => {
-                    const latlng = event.latlng;
-                    if (meetingMarker) {
-                        map.removeLayer(meetingMarker);
-                    }
-                    meetingMarker = L.marker([latlng.lat, latlng.lng])
-                        .addTo(map)
-                        .bindPopup('<div class="marker-popup">จุดนัดพบ</div>')
-                        .openPopup();
+// Long Press to Set Meeting Point
+let pressTimer;
+map.on('mousedown', (event) => {
+    pressTimer = setTimeout(() => {
+        const latlng = event.latlng;
+        if (meetingMarker) {
+            map.removeLayer(meetingMarker);
+        }
+        meetingMarker = L.marker([latlng.lat, latlng.lng])
+            .addTo(map)
+            .bindPopup('<div class="marker-popup">จุดนัดพบ</div>')
+            .openPopup();
 
-                    // Calculate Route
-                    calculateRoute(userMarker.getLatLng(), meetingMarker.getLatLng());
-                }, 1000); // 1 second long press
-            });
+        // Calculate Route
+        calculateRoute(userMarker.getLatLng(), meetingMarker.getLatLng());
+    }, 1000); // 1 second long press
+});
 
-            map.on('mouseup', () => {
-                clearTimeout(pressTimer);
-            });
+map.on('mouseup', () => {
+    clearTimeout(pressTimer);
+});
+
+// Add Touch Events for Mobile
+map.on('touchstart', (event) => {
+    pressTimer = setTimeout(() => {
+        const latlng = event.latlng;
+        if (meetingMarker) {
+            map.removeLayer(meetingMarker);
+        }
+        meetingMarker = L.marker([latlng.lat, latlng.lng])
+            .addTo(map)
+            .bindPopup('<div class="marker-popup">จุดนัดพบ</div>')
+            .openPopup();
+
+        // Calculate Route
+        calculateRoute(userMarker.getLatLng(), meetingMarker.getLatLng());
+    }, 1000); // 1 second long press
+});
+
+map.on('touchend', () => {
+    clearTimeout(pressTimer);
+});
 
             // Delete Meeting Marker
             map.on('contextmenu', (event) => {
