@@ -5,18 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>จุดนัดพบ</title>
     <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        #start-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f0f0f0;
+        }
         #map {
             width: 100%;
-            height: 500px;
+            height: 100vh;
+        }
+        .marker-popup {
+            font-size: 14px;
+            text-align: center;
         }
     </style>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 </head>
 <body>
-    <h1>ระบุจุดนัดพบ</h1>
-    <div id="map"></div>
-    <p>คลิกบนแผนที่เพื่อกำหนดตำแหน่งของคุณ</p>
+    <!-- Start Screen -->
+    <div id="start-screen">
+        <h1>ระบุชื่อทีม</h1>
+        <input type="text" id="team-name" placeholder="กรอกชื่อทีม" />
+        <button id="start-button">เริ่ม</button>
+    </div>
+
+    <!-- Map Screen -->
+    <div id="map-screen" style="display: none;">
+        <div id="map"></div>
+    </div>
 
     <!-- Firebase SDK -->
     <script type="module">
@@ -24,7 +49,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
         import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
 
-        // ตั้งค่า Firebase
+        // Firebase Configuration
         const firebaseConfig = {
             apiKey: "AIzaSyC_VUDDpxMiRkLONjOganaRqvoi4q3Gnt8",
             authDomain: "meetingpointapp.firebaseapp.com",
@@ -39,55 +64,149 @@
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
 
-        // สร้างแผนที่ OpenStreetMap
-        const map = L.map('map').setView([13.7563, 100.5018], 12); // ตั้งค่าเริ่มต้นที่กรุงเทพฯ
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
+        let map;
         let userMarker;
+        let meetingMarker;
+        let teamName;
 
-        // เมื่อคลิกบนแผนที่
-        map.on('click', (event) => {
-            const lat = event.latlng.lat;
-            const lng = event.latlng.lng;
-
-            // อัปเดตตำแหน่งของผู้ใช้ใน Firebase
-            const userId = localStorage.getItem('userId') || `user${Math.random().toString(36).substr(2, 5)}`;
-            localStorage.setItem('userId', userId);
-
-            set(ref(database, `users/${userId}`), {
-                lat: lat,
-                lng: lng
-            });
-
-            // อัปเดต Marker ของผู้ใช้เอง
-            if (userMarker) {
-                map.removeLayer(userMarker); // ลบ Marker เดิม
+        // Show Start Screen
+        document.getElementById('start-button').addEventListener('click', () => {
+            teamName = document.getElementById('team-name').value.trim();
+            if (!teamName) {
+                alert('กรุณากรอกชื่อทีม');
+                return;
             }
-            userMarker = L.marker([lat, lng]).addTo(map);
+
+            // Hide Start Screen and Show Map Screen
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('map-screen').style.display = 'block';
+
+            // Initialize Map
+            initMap();
         });
 
-        // ดึงข้อมูลตำแหน่งจาก Firebase และแสดง Marker ของผู้ใช้อื่น
-        const usersRef = ref(database, 'users');
-        onValue(usersRef, (snapshot) => {
-            const users = snapshot.val();
-            if (!users) return;
+        function initMap() {
+            // Create Map
+            map = L.map('map').setView([13.7563, 100.5018], 12); // Default to Bangkok
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
 
-            // ลบ Marker เดิมทั้งหมด
-            map.eachLayer((layer) => {
-                if (layer instanceof L.Marker && layer !== userMarker) {
-                    map.removeLayer(layer);
+            // Get User's Current Location
+            navigator.geolocation.watchPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+
+                    // Update User Marker
+                    if (userMarker) {
+                        map.removeLayer(userMarker);
+                    }
+                    userMarker = L.marker([lat, lng]).addTo(map).bindPopup(`<div class="marker-popup">${teamName}</div>`).openPopup();
+
+                    // Center Map on User's Location
+                    map.setView([lat, lng], 12);
+
+                    // Update Firebase
+                    const userId = localStorage.getItem('userId') || `user${Math.random().toString(36).substr(2, 5)}`;
+                    localStorage.setItem('userId', userId);
+                    set(ref(database, `users/${userId}`), {
+                        teamName: teamName,
+                        lat: lat,
+                        lng: lng
+                    });
+                },
+                (error) => {
+                    console.error('Error getting location:', error);
+                }
+            );
+
+            // Listen for Other Users' Locations
+            const usersRef = ref(database, 'users');
+            onValue(usersRef, (snapshot) => {
+                const users = snapshot.val();
+                if (!users) return;
+
+                // Remove Old Markers
+                map.eachLayer((layer) => {
+                    if (layer instanceof L.Marker && layer !== userMarker && layer !== meetingMarker) {
+                        map.removeLayer(layer);
+                    }
+                });
+
+                // Add Markers for Other Users
+                for (const [userId, userData] of Object.entries(users)) {
+                    if (userId !== localStorage.getItem('userId')) {
+                        L.marker([userData.lat, userData.lng])
+                            .addTo(map)
+                            .bindPopup(`<div class="marker-popup">${userData.teamName}</div>`);
+                    }
                 }
             });
 
-            // เพิ่ม Marker สำหรับผู้ใช้อื่น
-            for (const [userId, position] of Object.entries(users)) {
-                if (userId !== localStorage.getItem('userId')) {
-                    L.marker([position.lat, position.lng]).addTo(map);
+            // Long Press to Set Meeting Point
+            let pressTimer;
+            map.on('mousedown', (event) => {
+                pressTimer = setTimeout(() => {
+                    const latlng = event.latlng;
+                    if (meetingMarker) {
+                        map.removeLayer(meetingMarker);
+                    }
+                    meetingMarker = L.marker([latlng.lat, latlng.lng])
+                        .addTo(map)
+                        .bindPopup('<div class="marker-popup">จุดนัดพบ</div>')
+                        .openPopup();
+
+                    // Calculate Route
+                    calculateRoute(userMarker.getLatLng(), meetingMarker.getLatLng());
+                }, 1000); // 1 second long press
+            });
+
+            map.on('mouseup', () => {
+                clearTimeout(pressTimer);
+            });
+
+            // Delete Meeting Marker
+            map.on('contextmenu', (event) => {
+                if (meetingMarker) {
+                    map.removeLayer(meetingMarker);
+                    meetingMarker = null;
                 }
-            }
-        });
+            });
+        }
+
+        function calculateRoute(start, end) {
+            const apiKey = 'YOUR_GOOGLE_MAPS_API_KEY'; // Replace with your Google Maps API Key
+            const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${start.lat},${start.lng}&destination=${end.lat},${end.lng}&key=${apiKey}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'OK') {
+                        const route = data.routes[0].overview_polyline.points;
+                        const decodedRoute = L.Polyline.fromEncoded(route).getLatLngs();
+
+                        // Draw Route on Map
+                        if (map.route) {
+                            map.removeLayer(map.route);
+                        }
+                        map.route = L.polyline(decodedRoute, { color: 'blue' }).addTo(map);
+
+                        // Fit Map to Route
+                        map.fitBounds(map.route.getBounds());
+
+                        // Display Distance and Duration
+                        const distance = data.routes[0].legs[0].distance.text;
+                        const duration = data.routes[0].legs[0].duration.text;
+                        alert(`ระยะทาง: ${distance}\nเวลาเดินทาง: ${duration}`);
+                    } else {
+                        alert('ไม่สามารถคำนวณเส้นทางได้');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error calculating route:', error);
+                });
+        }
     </script>
 
     <!-- Leaflet JS -->
