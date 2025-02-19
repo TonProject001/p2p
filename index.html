@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>จุดนัดพบ</title>
+    <style>
+        #map {
+            height: 400px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>จุดนัดพบ</h1>
+    <div id="map"></div>
+    <p id="status">กำลังดึงตำแหน่ง...</p>
+
+    <script>
+        const map = L.map('map').setView([13.7563, 100.5018], 13); // ตำแหน่งเริ่มต้นที่กรุงเทพฯ
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let userMarker = null;
+        let partnerMarker = null;
+
+        // ฟังก์ชันสำหรับอัพเดตตำแหน่ง
+        function updateLocation(latitude, longitude) {
+            if (userMarker) {
+                userMarker.setLatLng([latitude, longitude]);
+            } else {
+                userMarker = L.marker([latitude, longitude]).addTo(map);
+            }
+            map.setView([latitude, longitude], 13);
+        }
+
+        // ฟังก์ชันสำหรับอัพเดตตำแหน่งของคู่หู
+        function updatePartnerLocation(latitude, longitude) {
+            if (partnerMarker) {
+                partnerMarker.setLatLng([latitude, longitude]);
+            } else {
+                partnerMarker = L.marker([latitude, longitude], {color: 'red'}).addTo(map);
+            }
+        }
+
+        // ใช้ Geolocation API เพื่อดึงตำแหน่งปัจจุบัน
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition((position) => {
+                const { latitude, longitude } = position.coords;
+                updateLocation(latitude, longitude);
+
+                // ส่งตำแหน่งไปยังเซิร์ฟเวอร์ (ตัวอย่างเท่านั้น)
+                // ในทางปฏิบัติคุณควรใช้ WebSocket หรือ API อื่นๆ
+                fetch('/update-location', {
+                    method: 'POST',
+                    body: JSON.stringify({ latitude, longitude }),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+            }, (error) => {
+                console.error('Error getting location', error);
+            });
+        } else {
+            alert('เบราว์เซอร์ของคุณไม่รองรับ Geolocation');
+        }
+
+        // ตัวอย่างการรับตำแหน่งของคู่หู (ควรใช้ WebSocket ในทางปฏิบัติ)
+        setInterval(() => {
+            fetch('/get-partner-location')
+                .then(response => response.json())
+                .then(data => {
+                    updatePartnerLocation(data.latitude, data.longitude);
+                });
+        }, 5000); // อัพเดตทุก 5 วินาที
+    </script>
+</body>
+</html>
